@@ -1,5 +1,6 @@
 // Pannello gestione menu bar: prodotti, categorie, tavoli/QR, impostazioni
 import { supabase, esc, euro } from './sb.js'
+import { COLORS, logoHtml, wavePath } from './brand.js'
 
 const $ = id => document.getElementById(id)
 const state = { categorie: [], prodotti: [], tavoli: [], imp: {} }
@@ -69,10 +70,15 @@ async function loadAll() {
   state.prodotti = p.data
   state.tavoli = t.data
   state.imp = i.data || {}
+  renderBrand()
   renderProdotti()
   renderCategorie()
   renderTavoli()
   renderImpostazioni()
+}
+
+function renderBrand() {
+  $('top-name').textContent = state.imp.nome_bar || 'Menu'
 }
 
 // ---------- Prodotti ----------
@@ -228,19 +234,19 @@ function qrSvg(text) {
   const qr = qrcode(0, 'M')
   qr.addData(text)
   qr.make()
-  const n = qr.getModuleCount(), m = 4, size = n + m * 2
+  const n = qr.getModuleCount(), m = 2, size = n + m * 2
   let d = ''
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + m} ${r + m}h1v1h-1z`
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#0F172A"/></svg>`
+  return `<svg class="qr" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="${COLORS.navy}"/></svg>`
 }
 
 function qrCard(t) {
   const label = t ? `Tavolo ${esc(t.etichetta)}` : 'Menu'
   return `<div class="qr-card" data-tav="${t ? t.id : ''}">
-    <div class="qr-bar">${esc(state.imp.nome_bar || 'Menu')}</div>
-    <div class="qr-sub">Inquadra per vedere il menu</div>
-    ${qrSvg(tableUrl(t?.etichetta))}
+    ${logoHtml(state.imp)}
+    <div class="qr-code">${qrSvg(tableUrl(t?.etichetta))}</div>
     <div class="qr-table">${label}</div>
+    <div class="qr-sub">Inquadra per vedere il menu</div>
     <div class="qr-tools">
       <button class="btn sm" data-png>PNG</button>
       <a class="btn sm" href="${esc(tableUrl(t?.etichetta))}" target="_blank" rel="noopener">Apri</a>
@@ -292,25 +298,61 @@ $('qr-grid').addEventListener('click', async e => {
   }
 })
 
-// Esporta la card QR (nome bar + codice + tavolo) come PNG ad alta risoluzione
-function downloadPng(card) {
-  const svg = card.querySelector('svg').outerHTML
+// Esporta la card QR (logo + codice + tavolo) come PNG ad alta risoluzione, con i colori del menu
+async function downloadPng(card) {
+  const svg = card.querySelector('svg.qr').outerHTML
+  const label = card.querySelector('.qr-table').textContent
+  const nome = state.imp.nome_bar || 'Il nostro Bar'
+  const sub = state.imp.sottotitolo || ''
+  const serif = "'Playfair Display', Georgia, serif", sans = "'Josefin Sans', 'Century Gothic', Arial, sans-serif"
+  await Promise.all([document.fonts.load(`italic 700 120px ${serif}`), document.fonts.load(`700 40px ${sans}`)]).catch(() => {})
+
   const img = new Image()
   img.onload = () => {
-    const W = 1000, H = 1300, canvas = document.createElement('canvas')
+    const W = 1000, H = 1400, canvas = document.createElement('canvas')
     canvas.width = W; canvas.height = H
     const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H)
-    ctx.fillStyle = '#0F172A'; ctx.textAlign = 'center'
-    ctx.font = '800 64px Inter, Arial, sans-serif'
-    ctx.fillText(card.querySelector('.qr-bar').textContent, W / 2, 110)
-    ctx.fillStyle = '#64748B'; ctx.font = '500 36px Inter, Arial, sans-serif'
-    ctx.fillText('Inquadra per vedere il menu', W / 2, 170)
+    // Testo con spaziatura tra le lettere, centrato
+    const spaced = (text, y, font, color, spacing) => {
+      ctx.font = font; ctx.fillStyle = color
+      const chars = [...text.toUpperCase()]
+      const w = chars.reduce((s, ch) => s + ctx.measureText(ch).width + spacing, -spacing)
+      let x = W / 2 - w / 2
+      ctx.textAlign = 'left'
+      for (const ch of chars) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + spacing }
+      return w
+    }
+
+    ctx.fillStyle = COLORS.navy; ctx.fillRect(0, 0, W, H)
+    ctx.strokeStyle = 'rgba(246,239,227,.45)'; ctx.lineWidth = 2; ctx.strokeRect(30, 30, W - 60, H - 60)
+
+    // — BAR —
+    const kw = spaced('Bar', 130, `700 30px ${sans}`, COLORS.gold, 14)
+    ctx.fillStyle = 'rgba(246,239,227,.7)'
+    ctx.fillRect(W / 2 - kw / 2 - 120, 119, 90, 2); ctx.fillRect(W / 2 + kw / 2 + 30, 119, 90, 2)
+    // Nome (ridotto se troppo lungo)
+    let size = 110
+    do { ctx.font = `italic 700 ${size}px ${serif}`; size -= 4 } while (ctx.measureText(nome).width > W - 140 && size > 40)
+    ctx.fillStyle = COLORS.cream; ctx.textAlign = 'center'; ctx.fillText(nome, W / 2, 250)
+    // Onda
+    ctx.save()
+    const k = 500 / 162 // larghezza dell'onda a 8 ondulazioni
+    ctx.translate(W / 2 - 250, 262); ctx.scale(k, k)
+    ctx.strokeStyle = COLORS.gold; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.stroke(new Path2D(wavePath(8)))
+    ctx.restore()
+    if (sub) spaced(sub, 350, `600 30px ${sans}`, COLORS.cream, 12)
+
+    // Codice QR su fondo bianco
+    ctx.fillStyle = '#fff'
+    ctx.beginPath(); ctx.roundRect(190, 400, 620, 620, 24); ctx.fill()
     ctx.imageSmoothingEnabled = false
-    ctx.drawImage(img, 100, 210, 800, 800)
-    ctx.fillStyle = '#0F172A'; ctx.font = '800 96px Inter, Arial, sans-serif'
-    const label = card.querySelector('.qr-table').textContent
-    ctx.fillText(label, W / 2, 1150)
+    ctx.drawImage(img, 210, 420, 580, 580)
+
+    spaced(label, 1135, `700 64px ${sans}`, COLORS.gold, 20)
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(246,239,227,.75)'; ctx.font = `400 32px ${sans}`
+    ctx.fillText('Inquadra per vedere il menu', W / 2, 1205)
+
     const a = document.createElement('a')
     a.download = `qr-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`
     a.href = canvas.toDataURL('image/png')
@@ -346,5 +388,9 @@ $('imp-form').addEventListener('submit', async e => {
   toast('Impostazioni salvate')
   loadAll()
 })
+
+// Logo nella schermata di accesso (le impostazioni sono leggibili anche senza login)
+supabase.from('impostazioni').select('nome_bar,sottotitolo').eq('id', 1).maybeSingle()
+  .then(({ data }) => { $('login-brand').innerHTML = logoHtml(data || {}) })
 
 checkAccess().catch(e => showLogin(`Errore: ${e.message}`))

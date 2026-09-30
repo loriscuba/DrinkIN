@@ -1,0 +1,107 @@
+/* menu.css — menu pubblico, stile "carta del bar": blu notte, oro, crema */
+:root {
+  --navy: #16304D;
+  --navy-2: #1C3A5C;
+  --gold: #F2C14E;
+  --cream: #F6EFE3;
+  --cream-2: rgba(246, 239, 227, .68);
+  --leader: rgba(246, 239, 227, .42);
+  --tan: #C8AE88;
+  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --sans: 'Josefin Sans', 'Futura', 'Century Gothic', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--navy);
+  color: var(--cream);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.35;
+  min-height: 100vh;
+}
+.hidden { display: none !important; }
+
+/* Foglio: a tutto schermo su telefono, "carta" su sfondo sabbia da tablet in su */
+.sheet { background: var(--navy); min-height: 100vh; padding: 0 20px; }
+@media (min-width: 700px) {
+  body { background: var(--tan); padding: 40px 16px; }
+  .sheet {
+    max-width: 640px; margin: 0 auto; min-height: auto; padding: 0 48px;
+    border-radius: 6px; box-shadow: 0 18px 40px rgba(60, 40, 15, .35);
+  }
+}
+
+/* ---------- Logo ---------- */
+.menu-head { padding: 44px 0 26px; text-align: center; }
+.brand { display: flex; flex-direction: column; align-items: center; }
+.brand-kicker {
+  display: flex; align-items: center; gap: 14px;
+  font-family: var(--sans); font-weight: 700; font-size: .72rem; letter-spacing: .42em;
+  text-transform: uppercase; color: var(--gold);
+}
+.brand-kicker span { padding-left: .42em; } /* compensa il letter-spacing finale */
+.brand-kicker::before, .brand-kicker::after { content: ''; width: 46px; height: 1px; background: var(--cream-2); }
+.brand-name {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: clamp(2.3rem, 11vw, 3.1rem); line-height: 1.1; margin-top: 8px; color: var(--cream);
+}
+.brand-wave { width: min(250px, 70%); height: 12px; color: var(--gold); margin-top: 4px; overflow: visible; }
+.brand-sub {
+  font-family: var(--sans); font-weight: 600; font-size: .74rem; letter-spacing: .38em;
+  text-transform: uppercase; margin-top: 8px; padding-left: .38em; color: var(--cream);
+}
+.brand.is-loading .brand-name { min-height: 1.1em; }
+
+.table-badge {
+  display: inline-block; margin-top: 18px; padding: 6px 16px 4px; border: 1px solid var(--gold); border-radius: 999px;
+  font-family: var(--sans); font-weight: 700; font-size: .78rem; letter-spacing: .2em; text-transform: uppercase; color: var(--gold);
+}
+
+/* ---------- Barra categorie ---------- */
+.cat-nav {
+  position: sticky; top: 0; z-index: 5; background: var(--navy);
+  margin: 0 -20px; padding: 10px 20px; border-bottom: 1px solid rgba(246, 239, 227, .14);
+}
+@media (min-width: 700px) { .cat-nav { margin: 0 -48px; padding: 12px 48px; } }
+.chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; padding: 7px 13px 5px; border-radius: 999px; border: 1px solid rgba(242, 193, 78, .45);
+  font-family: var(--sans); font-weight: 600; font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--gold); text-decoration: none; white-space: nowrap;
+}
+.chip.active { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+
+/* ---------- Categorie e voci ---------- */
+.cat { padding-top: 30px; scroll-margin-top: 58px; }
+.cat h2 {
+  margin-bottom: 10px; line-height: 1.5;
+  font-family: var(--sans); font-weight: 700; font-size: .98rem; letter-spacing: .3em; text-transform: uppercase; color: var(--gold);
+}
+@media (max-width: 420px) { .cat h2 { letter-spacing: .2em; } }
+/* L'onda segue l'ultima parola del titolo, anche quando va a capo */
+.cat-wave { display: inline-block; vertical-align: middle; width: 40px; height: 10px; margin-left: 4px; color: var(--gold); overflow: visible; }
+
+.item { padding: 5px 0; }
+.item-line { display: flex; align-items: flex-end; align-items: last baseline; gap: 8px; } /* nomi su più righe: puntini e prezzo sull'ultima */
+.item-name { font-style: italic; font-weight: 700; font-size: 1.08rem; }
+.item-name .star { color: var(--gold); font-style: normal; margin-left: 2px; }
+.leader { flex: 1; min-width: 16px; border-bottom: 1.5px dotted var(--leader); margin-bottom: .3em; }
+.item-price {
+  font-family: var(--sans); font-weight: 700; font-size: .98rem; color: var(--gold);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.item-desc { font-family: var(--sans); font-size: .82rem; line-height: 1.35; color: var(--cream-2); margin-top: 1px; padding-right: 64px; }
+.item-line.variant { padding-left: 16px; margin-top: 2px; }
+.item-line.variant .item-name { font-weight: 500; font-size: .98rem; color: var(--cream-2); }
+
+/* ---------- Piede ---------- */
+.menu-foot { padding: 40px 0 36px; text-align: center; }
+.menu-foot p:first-child { font-family: var(--sans); font-size: .78rem; color: var(--cream-2); max-width: 420px; margin: 0 auto; }
+.foot-mark {
+  margin-top: 26px; font-family: var(--sans); font-weight: 700; font-size: .82rem;
+  letter-spacing: .6em; padding-left: .6em; text-transform: uppercase; color: var(--gold);
+}
+.state { padding: 60px 0; text-align: center; font-family: var(--sans); color: var(--cream-2); }

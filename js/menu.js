@@ -1,7 +1,12 @@
 // Menu pubblico: letto dai clienti tramite QR code (?t=<tavolo>)
-import { supabase, esc, euro } from './sb.js'
+import { supabase, esc } from './sb.js'
+import { logoHtml, waveSvg } from './brand.js'
 
 const $ = id => document.getElementById(id)
+const fmt = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const price = n => fmt.format(Number(n || 0))
+
+$('logo').innerHTML = logoHtml({ nome_bar: ' ' }, 'is-loading')
 
 const tavolo = new URLSearchParams(location.search).get('t')
 if (tavolo) {
@@ -9,7 +14,7 @@ if (tavolo) {
   $('table-badge').classList.remove('hidden')
 }
 
-// Raggruppa le voci con lo stesso nome e una variante (es. Piccolo / Grande) in un'unica riga
+// Raggruppa le voci con lo stesso nome e una variante (es. Piccolo / Grande) sotto un'unica voce
 function groupVariants(prodotti) {
   const out = []
   for (const p of prodotti) {
@@ -27,17 +32,17 @@ function groupVariants(prodotti) {
   return out
 }
 
+const line = (label, value, cls = '') =>
+  `<div class="item-line ${cls}"><span class="item-name">${label}</span><span class="leader" aria-hidden="true"></span><span class="item-price">${value}</span></div>`
+
 function renderItem(p) {
-  const star = p.surgelato ? '<span class="star" title="Prodotto surgelato">*</span>' : ''
-  const price = p.varianti
-    ? `<div class="variants">${p.varianti.map(v => `<span><small>${esc(v.variante)}</small>${euro(v.prezzo)}</span>`).join('')}</div>`
-    : `<div class="item-price">${euro(p.prezzo)}</div>`
+  const name = esc(p.nome) + (p.surgelato ? '<span class="star" title="Prodotto surgelato">*</span>' : '')
+  const desc = p.descrizione ? `<div class="item-desc">${esc(p.descrizione)}</div>` : ''
+  if (!p.varianti) return `<div class="item">${line(name, price(p.prezzo))}${desc}</div>`
   return `<div class="item">
-    <div>
-      <div class="item-name">${esc(p.nome)}${star}</div>
-      ${p.descrizione ? `<div class="item-desc">${esc(p.descrizione)}</div>` : ''}
-    </div>
-    ${price}
+    <div class="item-line"><span class="item-name">${name}</span></div>
+    ${desc}
+    ${p.varianti.map(v => line(esc(v.variante), price(v.prezzo), 'variant')).join('')}
   </div>`
 }
 
@@ -52,23 +57,23 @@ async function load() {
   if (err) throw err
 
   const s = imp.data || {}
-  if (s.nome_bar) { $('bar-name').textContent = s.nome_bar; document.title = `Menu · ${s.nome_bar}` }
-  $('bar-sub').textContent = s.sottotitolo || ''
-  $('foot').textContent = s.nota_piede || ''
+  $('logo').innerHTML = logoHtml(s)
+  if (s.nome_bar) document.title = `Menu · ${s.nome_bar}`
+  $('foot').textContent = [s.nota_piede, 'Prezzi in euro.'].filter(Boolean).join(' ')
 
   const byCat = new Map(cat.data.map(c => [c.id, []]))
   for (const p of prod.data) byCat.get(p.categoria_id)?.push(p)
   const cats = cat.data.filter(c => byCat.get(c.id).length)
 
   if (!cats.length) {
-    $('menu').innerHTML = '<p class="state muted">Il menu non è ancora disponibile.</p>'
+    $('menu').innerHTML = '<p class="state">Il menu non è ancora disponibile.</p>'
     return
   }
 
   $('cat-chips').innerHTML = cats.map(c => `<a class="chip" href="#c-${c.id}" data-id="${c.id}">${esc(c.nome)}</a>`).join('')
   $('cat-nav').classList.remove('hidden')
   $('menu').innerHTML = cats.map(c => `<section class="cat" id="c-${c.id}">
-    <h2>${esc(c.nome)}</h2>
+    <h2><span>${esc(c.nome)}</span>${waveSvg(2, 'cat-wave')}</h2>
     <div class="items">${groupVariants(byCat.get(c.id)).map(renderItem).join('')}</div>
   </section>`).join('')
 
@@ -87,5 +92,5 @@ async function load() {
 
 load().catch(e => {
   console.error(e)
-  $('menu').innerHTML = '<p class="state muted">Impossibile caricare il menu. Riprova tra poco.</p>'
+  $('menu').innerHTML = '<p class="state">Impossibile caricare il menu. Riprova tra poco.</p>'
 })
