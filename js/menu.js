@@ -103,21 +103,57 @@ function render() {
   observeSections()
 }
 
-// Evidenzia la categoria visibile nella barra in alto
-let io
-function observeSections() {
-  io?.disconnect()
-  const chips = [...document.querySelectorAll('.chip')]
-  io = new IntersectionObserver(entries => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue
-      chips.forEach(ch => ch.classList.toggle('active', ch.dataset.id === e.target.id.slice(2)))
-      const active = chips.find(ch => ch.classList.contains('active'))
-      active?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
-    }
-  }, { rootMargin: '-70px 0px -70% 0px' })
-  document.querySelectorAll('.cat').forEach(sec => io.observe(sec))
+// ---------- Categoria evidenziata nella barra in alto ----------
+// La categoria toccata resta evidenziata finché l'utente non scorre di sua mano; altrimenti vale
+// l'ultima sezione il cui titolo ha superato la barra, e in fondo alla pagina l'ultima sezione
+// (le ultime categorie, se corte, non riescono ad arrivare in cima allo schermo).
+let tapped = null
+
+function currentSection() {
+  const secs = [...document.querySelectorAll('.cat')]
+  if (!secs.length) return null
+  const doc = document.documentElement
+  if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4 && window.scrollY > 0) return secs.at(-1).id.slice(2)
+  const line = $('cat-nav').getBoundingClientRect().bottom + 24
+  let cur = secs[0]
+  for (const sec of secs) if (sec.getBoundingClientRect().top <= line) cur = sec
+  return cur.id.slice(2)
 }
+
+function setActive(id) {
+  const box = $('cat-chips')
+  let active = null
+  box.querySelectorAll('.chip').forEach(ch => {
+    const on = ch.dataset.id === id
+    ch.classList.toggle('active', on)
+    if (on) active = ch
+  })
+  // Porta il bottone attivo al centro della barra (solo in orizzontale, senza muovere la pagina)
+  if (active) box.scrollTo({ left: active.offsetLeft - (box.clientWidth - active.offsetWidth) / 2, behavior: 'smooth' })
+}
+
+function observeSections() {
+  setActive(tapped || currentSection())
+}
+
+$('cat-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip')
+  if (!chip) return
+  e.preventDefault()
+  tapped = chip.dataset.id
+  setActive(tapped)
+  document.getElementById(`c-${tapped}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+
+// Un gesto dell'utente (dito, rotella, tastiera) riporta l'evidenziazione a seguire lo scorrimento
+;['touchstart', 'wheel', 'keydown'].forEach(ev => window.addEventListener(ev, () => { tapped = null }, { passive: true }))
+
+let ticking = false
+window.addEventListener('scroll', () => {
+  if (ticking || tapped) return
+  ticking = true
+  requestAnimationFrame(() => { ticking = false; setActive(currentSection()) })
+}, { passive: true })
 
 async function load() {
   const [imp, cat, prod] = await Promise.all([
