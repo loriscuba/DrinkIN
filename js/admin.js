@@ -1,6 +1,8 @@
 // Pannello gestione menu bar: prodotti, categorie, tavoli/QR, impostazioni
 import { supabase, esc, euro } from './sb.js'
 import { COLORS, logoHtml, wavePath } from './brand.js'
+import { TR_LANGS, flagSvg } from './i18n.js'
+import { trFieldsHtml, fillTr, watchTr, readTr, autoTranslate, translateText, missingLangs } from './translate.js'
 
 const $ = id => document.getElementById(id)
 const state = { categorie: [], prodotti: [], tavoli: [], imp: {} }
@@ -17,6 +19,40 @@ function toast(msg) {
 function fail(error, msg = 'Operazione non riuscita') {
   console.error(error)
   toast(`${msg}: ${error.message || error}`)
+}
+
+// ---------- Traduzioni ----------
+const PROD_TR = ['nome', 'variante', 'descrizione']
+$('p-tr').insertAdjacentHTML('beforeend', trFieldsHtml([
+  { key: 'nome', label: 'Nome' }, { key: 'variante', label: 'Variante' }, { key: 'descrizione', label: 'Descrizione / ingredienti', multiline: true },
+]))
+$('cat-tr').insertAdjacentHTML('beforeend', trFieldsHtml([{ key: 'nome', label: 'Nome della categoria' }]))
+$('imp-tr').insertAdjacentHTML('beforeend', trFieldsHtml([{ key: 'nota_piede', label: 'Nota a piè di pagina', multiline: true }]))
+;['p-tr', 'cat-tr', 'imp-tr'].forEach(id => watchTr($(id)))
+
+// Etichetta con le bandiere delle lingue a cui manca una traduzione
+const missingBadge = langs => langs.length
+  ? `<span class="tr-missing" title="Traduzioni mancanti">${langs.map(flagSvg).join('')}</span>`
+  : ''
+
+const trFailMsg = n => `${n} traduzion${n === 1 ? 'e' : 'i'} automatic${n === 1 ? 'a' : 'he'} non riuscit${n === 1 ? 'a' : 'e'}: il menu mostrerà l'italiano, puoi completarle a mano`
+
+// Traduce un testo in tutte le lingue (per le categorie create o rinominate dalla lista)
+async function translateAll(text, key) {
+  const out = {}
+  let failed = 0
+  await Promise.all(TR_LANGS.map(l => translateText(text, l.code)
+    .then(v => { out[l.code] = { [key]: v } })
+    .catch(err => { console.warn(err); failed++ })))
+  if (failed) toast(trFailMsg(failed))
+  return out
+}
+
+async function withBusy(btn, fn) {
+  const label = btn.textContent
+  btn.disabled = true
+  btn.textContent = 'Traduzione…'
+  try { return await fn() } finally { btn.disabled = false; btn.textContent = label }
 }
 
 // ---------- Auth ----------
@@ -96,6 +132,7 @@ function renderProdotti() {
           <div class="item-name">${esc(p.nome)}${p.variante ? ` <span class="muted">· ${esc(p.variante)}</span>` : ''}${p.surgelato ? '<span class="star">*</span>' : ''}</div>
           ${p.descrizione ? `<div class="item-desc">${esc(p.descrizione)}</div>` : ''}
         </div>
+        ${missingBadge(missingLangs(p, PROD_TR))}
         <div class="item-price">${euro(p.prezzo)}</div>
         <button class="btn sm" data-edit="${p.id}">Modifica</button>
       </div>`).join('') || '<p class="muted" style="font-size:.9rem">Nessun prodotto.</p>'}
@@ -139,12 +176,31 @@ function openProdotto(p) {
   $('p-ordine').value = p?.ordine ?? ''
   $('p-surg').checked = !!p?.surgelato
   $('p-disp').checked = p ? p.disponibile : true
+  fillTr($('p-tr'), p?.i18n)
+  toggleVarTr()
   $('p-del').classList.toggle('hidden', !p)
   $('prod-dialog').showModal()
 }
 
+// I campi "Variante" tradotti servono solo se il prodotto ha una variante
+const toggleVarTr = () => $('p-tr').classList.toggle('no-var', !$('p-var').value.trim())
+$('p-var').addEventListener('input', toggleVarTr)
+
+const prodSource = () => ({ nome: $('p-nome').value, variante: $('p-var').value, descrizione: $('p-desc').value })
+
+$('p-tr').querySelector('[data-auto-tr]').addEventListener('click', e => withBusy(e.target, async () => {
+  const failed = await autoTranslate($('p-tr'), prodSource(), { force: true })
+  if (failed) toast(trFailMsg(failed))
+}))
+
 $('prod-form').addEventListener('submit', async e => {
   e.preventDefault()
+  const submit = e.submitter || $('prod-form').querySelector('[type=submit]')
+  // Traduce i campi mancanti e rifà quelli il cui testo italiano è cambiato (se non corretti a mano)
+  const source = prodSource()
+  const changed = PROD_TR.filter(k => (source[k] || '').trim() !== (editing?.[k] || ''))
+  const failed = await withBusy(submit, () => autoTranslate($('p-tr'), source, { changed }))
+  if (failed) toast(trFailMsg(failed))
   const ordine = $('p-ordine').value === ''
     ? Math.max(0, ...state.prodotti.map(p => p.ordine)) + 1
     : parseInt($('p-ordine').value, 10)
@@ -157,6 +213,7 @@ $('prod-form').addEventListener('submit', async e => {
     ordine,
     surgelato: $('p-surg').checked,
     disponibile: $('p-disp').checked,
+    i18n: readTr($('p-tr')),
   }
   const { error } = editing
     ? await supabase.from('prodotti').update(row).eq('id', editing.id)
@@ -185,6 +242,8 @@ function renderCategorie() {
       <input type="text" class="c-nome grow" value="${esc(c.nome)}">
       <label class="check" style="margin:0"><input type="checkbox" class="c-attiva" ${c.attiva ? 'checked' : ''}> Visibile</label>
       <span class="muted" style="font-size:.85rem;white-space:nowrap">${n} prod.</span>
+      ${missingBadge(missingLangs(c, ['nome']))}
+      <button class="btn sm" data-tr-cat title="Nome in inglese, francese e tedesco">Lingue</button>
       <button class="btn sm" data-save-cat>Salva</button>
       <button class="btn sm danger" data-del-cat ${n ? 'disabled title="Svuota prima la categoria"' : ''}>Elimina</button>
     </div>`
@@ -202,10 +261,14 @@ $('cat-list').addEventListener('click', async e => {
       attiva: row.querySelector('.c-attiva').checked,
     }
     if (!upd.nome) return toast('Il nome è obbligatorio')
+    const cat = state.categorie.find(c => c.id === id)
+    if (upd.nome !== cat.nome) upd.i18n = await withBusy(e.target, () => translateAll(upd.nome, 'nome'))
     const { error } = await supabase.from('categorie').update(upd).eq('id', id)
     if (error) return fail(error)
     toast('Categoria salvata')
     loadAll()
+  } else if (e.target.hasAttribute('data-tr-cat')) {
+    openCatTr(state.categorie.find(c => c.id === id))
   } else if (e.target.hasAttribute('data-del-cat')) {
     if (!confirm('Eliminare questa categoria?')) return
     const { error } = await supabase.from('categorie').delete().eq('id', id)
@@ -220,10 +283,32 @@ $('cat-form').addEventListener('submit', async e => {
   const nome = $('cat-new').value.trim()
   if (!nome) return
   const ordine = Math.max(0, ...state.categorie.map(c => c.ordine)) + 1
-  const { error } = await supabase.from('categorie').insert({ nome, ordine })
+  const i18n = await withBusy(e.submitter || $('cat-form').querySelector('[type=submit]'), () => translateAll(nome, 'nome'))
+  const { error } = await supabase.from('categorie').insert({ nome, ordine, i18n })
   if (error) return fail(error)
   $('cat-new').value = ''
   toast('Categoria aggiunta')
+  loadAll()
+})
+
+let catEditing = null
+function openCatTr(c) {
+  catEditing = c
+  $('cat-tr-it').textContent = `Italiano: ${c.nome}`
+  fillTr($('cat-tr'), c.i18n)
+  $('cat-dialog').showModal()
+}
+$('cat-tr-cancel').addEventListener('click', () => $('cat-dialog').close())
+$('cat-tr').querySelector('[data-auto-tr]').addEventListener('click', e => withBusy(e.target, async () => {
+  const failed = await autoTranslate($('cat-tr'), { nome: catEditing.nome }, { force: true })
+  if (failed) toast(trFailMsg(failed))
+}))
+$('cat-tr-form').addEventListener('submit', async e => {
+  e.preventDefault()
+  const { error } = await supabase.from('categorie').update({ i18n: readTr($('cat-tr')) }).eq('id', catEditing.id)
+  if (error) return fail(error)
+  $('cat-dialog').close()
+  toast('Traduzioni salvate')
   loadAll()
 })
 
@@ -373,15 +458,27 @@ function renderImpostazioni() {
   $('imp-nome').value = state.imp.nome_bar || ''
   $('imp-sub').value = state.imp.sottotitolo || ''
   $('imp-nota').value = state.imp.nota_piede || ''
+  fillTr($('imp-tr'), state.imp.i18n)
 }
+
+$('imp-tr').querySelector('[data-auto-tr]').addEventListener('click', e => withBusy(e.target, async () => {
+  const failed = await autoTranslate($('imp-tr'), { nota_piede: $('imp-nota').value }, { force: true })
+  if (failed) toast(trFailMsg(failed))
+}))
 
 $('imp-form').addEventListener('submit', async e => {
   e.preventDefault()
+  const nota = $('imp-nota').value.trim()
+  const changed = nota !== (state.imp.nota_piede || '') ? ['nota_piede'] : []
+  const failed = await withBusy(e.submitter || $('imp-form').querySelector('[type=submit]'),
+    () => autoTranslate($('imp-tr'), { nota_piede: nota }, { changed }))
+  if (failed) toast(trFailMsg(failed))
   const row = {
     id: 1,
     nome_bar: $('imp-nome').value.trim(),
     sottotitolo: $('imp-sub').value.trim() || null,
-    nota_piede: $('imp-nota').value.trim() || null,
+    nota_piede: nota || null,
+    i18n: readTr($('imp-tr')),
   }
   const { error } = await supabase.from('impostazioni').upsert(row)
   if (error) return fail(error)

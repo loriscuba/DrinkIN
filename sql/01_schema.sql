@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS drinkin.impostazioni (
 );
 INSERT INTO drinkin.impostazioni (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
+-- Traduzioni: {"en": {"nome": ..., "descrizione": ..., "variante": ...}, "fr": {...}, "de": {...}}
+-- (impostazioni: {"en": {"nota_piede": ...}, ...}). Se manca una traduzione il menu mostra l'italiano.
+ALTER TABLE drinkin.categorie    ADD COLUMN IF NOT EXISTS i18n jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(i18n) = 'object');
+ALTER TABLE drinkin.prodotti     ADD COLUMN IF NOT EXISTS i18n jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(i18n) = 'object');
+ALTER TABLE drinkin.impostazioni ADD COLUMN IF NOT EXISTS i18n jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(i18n) = 'object');
+
 -- updated_at automatico
 CREATE OR REPLACE FUNCTION drinkin.touch_updated_at()
 RETURNS trigger

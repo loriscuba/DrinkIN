@@ -88,6 +88,9 @@
           <label class="field">Nome del bar<input type="text" id="imp-nome" required></label>
           <label class="field">Sottotitolo sotto il logo (opzionale)<input type="text" id="imp-sub" placeholder="Es. Porto Vado"></label>
           <label class="field">Nota a piè di pagina<textarea id="imp-nota"></textarea></label>
+          <fieldset class="tr-box" id="imp-tr">
+            <legend>Traduzioni della nota <button class="btn sm" type="button" data-auto-tr>Traduci automaticamente</button></legend>
+          </fieldset>
           <button class="btn primary" type="submit">Salva</button>
         </form>
       </section>
@@ -107,12 +110,33 @@
         <label class="field">Prezzo (€)<input type="number" id="p-prezzo" step="0.01" min="0" required></label>
         <label class="field">Ordine<input type="number" id="p-ordine" step="1"></label>
       </div>
+      <fieldset class="tr-box" id="p-tr">
+        <legend>Traduzioni <button class="btn sm" type="button" data-auto-tr>Traduci automaticamente</button></legend>
+        <p class="tr-hint">Si compilano da sole al salvataggio; puoi correggerle a mano.</p>
+      </fieldset>
       <label class="check"><input type="checkbox" id="p-surg"> Prodotto surgelato (*)</label>
       <label class="check"><input type="checkbox" id="p-disp" checked> Disponibile</label>
       <div class="dialog-actions">
         <button class="btn danger" type="button" id="p-del">Elimina</button>
         <span style="display:flex;gap:8px">
           <button class="btn" type="button" id="p-cancel">Annulla</button>
+          <button class="btn primary" type="submit">Salva</button>
+        </span>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cat-dialog">
+    <form id="cat-tr-form" method="dialog">
+      <h3>Nome della categoria nelle lingue</h3>
+      <p class="muted" style="margin-bottom:12px" id="cat-tr-it"></p>
+      <fieldset class="tr-box" id="cat-tr">
+        <legend><button class="btn sm" type="button" data-auto-tr>Traduci automaticamente</button></legend>
+      </fieldset>
+      <div class="dialog-actions">
+        <span></span>
+        <span style="display:flex;gap:8px">
+          <button class="btn" type="button" id="cat-tr-cancel">Annulla</button>
           <button class="btn primary" type="submit">Salva</button>
         </span>
       </div>

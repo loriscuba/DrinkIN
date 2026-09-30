@@ -1,18 +1,38 @@
-// Menu pubblico: letto dai clienti tramite QR code (?t=<tavolo>)
+// Menu pubblico: letto dai clienti tramite QR code (?t=<tavolo>, ?lang=it|en|fr|de)
 import { supabase, esc } from './sb.js'
 import { logoHtml, waveSvg } from './brand.js'
+import { LANGS, UI, pick, flagSvg } from './i18n.js'
 
 const $ = id => document.getElementById(id)
-const fmt = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const price = n => fmt.format(Number(n || 0))
+const params = new URLSearchParams(location.search)
+const tavolo = params.get('t')
+const data = { imp: null, cat: [], prod: [] }
 
-$('logo').innerHTML = logoHtml({ nome_bar: ' ' }, 'is-loading')
-
-const tavolo = new URLSearchParams(location.search).get('t')
-if (tavolo) {
-  $('table-badge').textContent = `Tavolo ${tavolo.slice(0, 30)}`
-  $('table-badge').classList.remove('hidden')
+// Lingua: ?lang= → scelta precedente → lingua del telefono → italiano
+const codes = LANGS.map(l => l.code)
+function initialLang() {
+  const fromUrl = params.get('lang')
+  if (codes.includes(fromUrl)) return fromUrl
+  try { const saved = localStorage.getItem('drinkin-lang'); if (codes.includes(saved)) return saved } catch {}
+  const nav = (navigator.language || 'it').slice(0, 2).toLowerCase()
+  return codes.includes(nav) ? nav : 'it'
 }
+let lang = initialLang()
+const t = key => UI[lang][key]
+
+function renderLangs() {
+  $('langs').setAttribute('aria-label', t('language'))
+  $('langs').innerHTML = LANGS.map(l => `<button type="button" class="lang ${l.code === lang ? 'active' : ''}" data-lang="${l.code}"
+    lang="${l.code}" title="${l.label}" aria-label="${l.label}" aria-pressed="${l.code === lang}">${flagSvg(l.code)}</button>`).join('')
+}
+
+$('langs').addEventListener('click', e => {
+  const btn = e.target.closest('[data-lang]')
+  if (!btn || btn.dataset.lang === lang) return
+  lang = btn.dataset.lang
+  try { localStorage.setItem('drinkin-lang', lang) } catch {}
+  render()
+})
 
 // Raggruppa le voci con lo stesso nome e una variante (es. Piccolo / Grande) sotto un'unica voce
 function groupVariants(prodotti) {
@@ -32,54 +52,63 @@ function groupVariants(prodotti) {
   return out
 }
 
-const line = (label, value, cls = '') =>
-  `<div class="item-line ${cls}"><span class="item-name">${label}</span><span class="leader" aria-hidden="true"></span><span class="item-price">${value}</span></div>`
-
-function renderItem(p) {
-  const name = esc(p.nome) + (p.surgelato ? '<span class="star" title="Prodotto surgelato">*</span>' : '')
-  const desc = p.descrizione ? `<div class="item-desc">${esc(p.descrizione)}</div>` : ''
+function renderItem(p, price) {
+  const line = (label, value, cls = '') =>
+    `<div class="item-line ${cls}"><span class="item-name">${label}</span><span class="leader" aria-hidden="true"></span><span class="item-price">${value}</span></div>`
+  const name = esc(pick(p, 'nome', lang)) + (p.surgelato ? `<span class="star" title="${t('frozen')}">*</span>` : '')
+  const d = pick(p, 'descrizione', lang)
+  const desc = d ? `<div class="item-desc">${esc(d)}</div>` : ''
   if (!p.varianti) return `<div class="item">${line(name, price(p.prezzo))}${desc}</div>`
   return `<div class="item">
     <div class="item-line"><span class="item-name">${name}</span></div>
     ${desc}
-    ${p.varianti.map(v => line(esc(v.variante), price(v.prezzo), 'variant')).join('')}
+    ${p.varianti.map(v => line(esc(pick(v, 'variante', lang)), price(v.prezzo), 'variant')).join('')}
   </div>`
 }
 
-async function load() {
-  const [imp, cat, prod] = await Promise.all([
-    supabase.from('impostazioni').select('*').eq('id', 1).maybeSingle(),
-    supabase.from('categorie').select('id,nome,ordine').eq('attiva', true).order('ordine').order('nome'),
-    supabase.from('prodotti').select('id,categoria_id,nome,variante,descrizione,prezzo,surgelato,ordine')
-      .eq('disponibile', true).order('ordine').order('nome'),
-  ])
-  const err = imp.error || cat.error || prod.error
-  if (err) throw err
+function render() {
+  const locale = LANGS.find(l => l.code === lang).locale
+  const fmt = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const price = n => fmt.format(Number(n || 0))
+  document.documentElement.lang = lang
+  renderLangs()
+  $('cat-nav').setAttribute('aria-label', t('categories'))
+  $('foot-mark').textContent = t('mark')
+  if (tavolo) {
+    $('table-badge').textContent = `${t('table')} ${tavolo.slice(0, 30)}`
+    $('table-badge').classList.remove('hidden')
+  }
+  if (!data.imp) return
 
-  const s = imp.data || {}
+  const s = data.imp
   $('logo').innerHTML = logoHtml(s)
-  if (s.nome_bar) document.title = `Menu · ${s.nome_bar}`
-  $('foot').textContent = [s.nota_piede, 'Prezzi in euro.'].filter(Boolean).join(' ')
+  document.title = `${t('mark')} · ${s.nome_bar || ''}`
+  $('foot').textContent = [pick(s, 'nota_piede', lang), t('prices')].filter(Boolean).join(' ')
 
-  const byCat = new Map(cat.data.map(c => [c.id, []]))
-  for (const p of prod.data) byCat.get(p.categoria_id)?.push(p)
-  const cats = cat.data.filter(c => byCat.get(c.id).length)
-
+  const byCat = new Map(data.cat.map(c => [c.id, []]))
+  for (const p of data.prod) byCat.get(p.categoria_id)?.push(p)
+  const cats = data.cat.filter(c => byCat.get(c.id).length)
   if (!cats.length) {
-    $('menu').innerHTML = '<p class="state">Il menu non è ancora disponibile.</p>'
+    $('cat-nav').classList.add('hidden')
+    $('menu').innerHTML = `<p class="state">${t('empty')}</p>`
     return
   }
 
-  $('cat-chips').innerHTML = cats.map(c => `<a class="chip" href="#c-${c.id}" data-id="${c.id}">${esc(c.nome)}</a>`).join('')
+  $('cat-chips').innerHTML = cats.map(c => `<a class="chip" href="#c-${c.id}" data-id="${c.id}">${esc(pick(c, 'nome', lang))}</a>`).join('')
   $('cat-nav').classList.remove('hidden')
   $('menu').innerHTML = cats.map(c => `<section class="cat" id="c-${c.id}">
-    <h2><span>${esc(c.nome)}</span>${waveSvg(2, 'cat-wave')}</h2>
-    <div class="items">${groupVariants(byCat.get(c.id)).map(renderItem).join('')}</div>
+    <h2><span>${esc(pick(c, 'nome', lang))}</span>${waveSvg(2, 'cat-wave')}</h2>
+    <div class="items">${groupVariants(byCat.get(c.id)).map(p => renderItem(p, price)).join('')}</div>
   </section>`).join('')
+  observeSections()
+}
 
-  // Evidenzia la categoria visibile nella barra in alto
+// Evidenzia la categoria visibile nella barra in alto
+let io
+function observeSections() {
+  io?.disconnect()
   const chips = [...document.querySelectorAll('.chip')]
-  const io = new IntersectionObserver(entries => {
+  io = new IntersectionObserver(entries => {
     for (const e of entries) {
       if (!e.isIntersecting) continue
       chips.forEach(ch => ch.classList.toggle('active', ch.dataset.id === e.target.id.slice(2)))
@@ -90,7 +119,25 @@ async function load() {
   document.querySelectorAll('.cat').forEach(sec => io.observe(sec))
 }
 
+async function load() {
+  const [imp, cat, prod] = await Promise.all([
+    supabase.from('impostazioni').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('categorie').select('id,nome,ordine,i18n').eq('attiva', true).order('ordine').order('nome'),
+    supabase.from('prodotti').select('id,categoria_id,nome,variante,descrizione,prezzo,surgelato,ordine,i18n')
+      .eq('disponibile', true).order('ordine').order('nome'),
+  ])
+  const err = imp.error || cat.error || prod.error
+  if (err) throw err
+  data.imp = imp.data || {}
+  data.cat = cat.data
+  data.prod = prod.data
+  render()
+}
+
+$('logo').innerHTML = logoHtml({ nome_bar: ' ' }, 'is-loading')
+$('menu').innerHTML = `<p class="state">${t('loading')}</p>`
+render()
 load().catch(e => {
   console.error(e)
-  $('menu').innerHTML = '<p class="state">Impossibile caricare il menu. Riprova tra poco.</p>'
+  $('menu').innerHTML = `<p class="state">${t('error')}</p>`
 })
