@@ -5,7 +5,8 @@ if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
   throw new Error('Configurazione Supabase mancante: verifica js/config.js')
 }
 
-export const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
+// Tutte le tabelle stanno nello schema "drinkin" (deve essere tra gli Exposed schemas della Data API)
+export const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, { db: { schema: 'drinkin' } })
 
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))

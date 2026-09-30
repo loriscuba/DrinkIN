@@ -1,33 +1,36 @@
 -- 01_schema.sql — DrinkIN: menu bar con QR code per i tavoli.
--- Tabelle con prefisso bar_ nello schema public.
--- Lettura pubblica (anon) per il menu; scrittura solo per gli utenti elencati in bar_admin.
--- Idempotente: si può rieseguire.
+-- Tutto nello schema "drinkin". Lettura pubblica (anon) per il menu;
+-- scrittura solo per gli utenti elencati in drinkin.admin. Idempotente: si può rieseguire.
+-- Dopo l'esecuzione: Project Settings → Data API → Exposed schemas → aggiungere "drinkin".
+
+CREATE SCHEMA IF NOT EXISTS drinkin;
+GRANT USAGE ON SCHEMA drinkin TO anon, authenticated, service_role;
 
 -- Amministratori (utenti Supabase Auth abilitati a modificare il menu)
-CREATE TABLE IF NOT EXISTS public.bar_admin (
+CREATE TABLE IF NOT EXISTS drinkin.admin (
   user_id    uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-ALTER TABLE public.bar_admin ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "bar_admin_self_read" ON public.bar_admin;
-CREATE POLICY "bar_admin_self_read" ON public.bar_admin FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
-REVOKE ALL ON public.bar_admin FROM anon;
-GRANT SELECT ON public.bar_admin TO authenticated;
+ALTER TABLE drinkin.admin ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "self_read" ON drinkin.admin;
+CREATE POLICY "self_read" ON drinkin.admin FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE ALL ON drinkin.admin FROM anon;
+GRANT SELECT ON drinkin.admin TO authenticated;
 
 -- Helper: l'utente corrente è amministratore?
-CREATE OR REPLACE FUNCTION public.bar_is_admin()
+CREATE OR REPLACE FUNCTION drinkin.is_admin()
 RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
-  SELECT EXISTS (SELECT 1 FROM public.bar_admin WHERE user_id = auth.uid());
+  SELECT EXISTS (SELECT 1 FROM drinkin.admin WHERE user_id = auth.uid());
 $$;
-REVOKE ALL ON FUNCTION public.bar_is_admin() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.bar_is_admin() TO authenticated;
+REVOKE ALL ON FUNCTION drinkin.is_admin() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION drinkin.is_admin() TO authenticated;
 
-CREATE TABLE IF NOT EXISTS public.bar_categorie (
+CREATE TABLE IF NOT EXISTS drinkin.categorie (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   nome       text NOT NULL UNIQUE,
   ordine     integer NOT NULL DEFAULT 0,
@@ -35,9 +38,9 @@ CREATE TABLE IF NOT EXISTS public.bar_categorie (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.bar_prodotti (
+CREATE TABLE IF NOT EXISTS drinkin.prodotti (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  categoria_id uuid NOT NULL REFERENCES public.bar_categorie(id) ON DELETE RESTRICT,
+  categoria_id uuid NOT NULL REFERENCES drinkin.categorie(id) ON DELETE RESTRICT,
   nome         text NOT NULL,
   variante     text,
   descrizione  text,
@@ -48,10 +51,9 @@ CREATE TABLE IF NOT EXISTS public.bar_prodotti (
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS prodotti_categoria_idx ON drinkin.prodotti (categoria_id, ordine);
 
-CREATE INDEX IF NOT EXISTS bar_prodotti_categoria_idx ON public.bar_prodotti (categoria_id, ordine);
-
-CREATE TABLE IF NOT EXISTS public.bar_tavoli (
+CREATE TABLE IF NOT EXISTS drinkin.tavoli (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   etichetta  text NOT NULL UNIQUE,   -- es. "1", "12", "Terrazza 3"
   ordine     integer NOT NULL DEFAULT 0,
@@ -60,17 +62,17 @@ CREATE TABLE IF NOT EXISTS public.bar_tavoli (
 );
 
 -- Impostazioni (riga singola, id = 1)
-CREATE TABLE IF NOT EXISTS public.bar_impostazioni (
+CREATE TABLE IF NOT EXISTS drinkin.impostazioni (
   id          smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   nome_bar    text NOT NULL DEFAULT 'Il nostro Bar',
   sottotitolo text,
   nota_piede  text DEFAULT '* Prodotto surgelato. Per informazioni su allergeni chiedere al personale.',
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
-INSERT INTO public.bar_impostazioni (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+INSERT INTO drinkin.impostazioni (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- updated_at automatico
-CREATE OR REPLACE FUNCTION public.bar_touch_updated_at()
+CREATE OR REPLACE FUNCTION drinkin.touch_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = ''
@@ -81,34 +83,35 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS bar_prodotti_touch ON public.bar_prodotti;
-CREATE TRIGGER bar_prodotti_touch BEFORE UPDATE ON public.bar_prodotti
-  FOR EACH ROW EXECUTE FUNCTION public.bar_touch_updated_at();
+DROP TRIGGER IF EXISTS prodotti_touch ON drinkin.prodotti;
+CREATE TRIGGER prodotti_touch BEFORE UPDATE ON drinkin.prodotti
+  FOR EACH ROW EXECUTE FUNCTION drinkin.touch_updated_at();
 
-DROP TRIGGER IF EXISTS bar_impostazioni_touch ON public.bar_impostazioni;
-CREATE TRIGGER bar_impostazioni_touch BEFORE UPDATE ON public.bar_impostazioni
-  FOR EACH ROW EXECUTE FUNCTION public.bar_touch_updated_at();
+DROP TRIGGER IF EXISTS impostazioni_touch ON drinkin.impostazioni;
+CREATE TRIGGER impostazioni_touch BEFORE UPDATE ON drinkin.impostazioni
+  FOR EACH ROW EXECUTE FUNCTION drinkin.touch_updated_at();
 
 -- RLS
-ALTER TABLE public.bar_categorie    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bar_prodotti     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bar_tavoli       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bar_impostazioni ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drinkin.categorie    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drinkin.prodotti     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drinkin.tavoli       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drinkin.impostazioni ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['bar_categorie','bar_prodotti','bar_tavoli','bar_impostazioni'] LOOP
-    EXECUTE format('DROP POLICY IF EXISTS "bar_public_read" ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS "bar_admin_insert" ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS "bar_admin_update" ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS "bar_admin_delete" ON public.%I', t);
-    EXECUTE format('CREATE POLICY "bar_public_read" ON public.%I FOR SELECT TO anon, authenticated USING (true)', t);
-    EXECUTE format('CREATE POLICY "bar_admin_insert" ON public.%I FOR INSERT TO authenticated WITH CHECK ((SELECT public.bar_is_admin()))', t);
-    EXECUTE format('CREATE POLICY "bar_admin_update" ON public.%I FOR UPDATE TO authenticated USING ((SELECT public.bar_is_admin())) WITH CHECK ((SELECT public.bar_is_admin()))', t);
-    EXECUTE format('CREATE POLICY "bar_admin_delete" ON public.%I FOR DELETE TO authenticated USING ((SELECT public.bar_is_admin()))', t);
+  FOREACH t IN ARRAY ARRAY['categorie','prodotti','tavoli','impostazioni'] LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "public_read" ON drinkin.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "admin_insert" ON drinkin.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "admin_update" ON drinkin.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "admin_delete" ON drinkin.%I', t);
+    EXECUTE format('CREATE POLICY "public_read" ON drinkin.%I FOR SELECT TO anon, authenticated USING (true)', t);
+    EXECUTE format('CREATE POLICY "admin_insert" ON drinkin.%I FOR INSERT TO authenticated WITH CHECK ((SELECT drinkin.is_admin()))', t);
+    EXECUTE format('CREATE POLICY "admin_update" ON drinkin.%I FOR UPDATE TO authenticated USING ((SELECT drinkin.is_admin())) WITH CHECK ((SELECT drinkin.is_admin()))', t);
+    EXECUTE format('CREATE POLICY "admin_delete" ON drinkin.%I FOR DELETE TO authenticated USING ((SELECT drinkin.is_admin()))', t);
   END LOOP;
 END $$;
 
-GRANT SELECT ON public.bar_categorie, public.bar_prodotti, public.bar_tavoli, public.bar_impostazioni TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.bar_categorie, public.bar_prodotti, public.bar_tavoli, public.bar_impostazioni TO authenticated;
+GRANT SELECT ON drinkin.categorie, drinkin.prodotti, drinkin.tavoli, drinkin.impostazioni TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON drinkin.categorie, drinkin.prodotti, drinkin.tavoli, drinkin.impostazioni TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA drinkin TO service_role;

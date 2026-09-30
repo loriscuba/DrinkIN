@@ -22,7 +22,7 @@ function fail(error, msg = 'Operazione non riuscita') {
 async function checkAccess() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return showLogin()
-  const { data: isAdmin, error } = await supabase.rpc('bar_is_admin')
+  const { data: isAdmin, error } = await supabase.rpc('is_admin')
   if (error) return showLogin(`Errore di verifica: ${error.message}`)
   if (!isAdmin) return showLogin('Questo account non è abilitato come amministratore.')
   $('login-view').classList.add('hidden')
@@ -58,10 +58,10 @@ document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', (
 // ---------- Data ----------
 async function loadAll() {
   const [c, p, t, i] = await Promise.all([
-    supabase.from('bar_categorie').select('*').order('ordine').order('nome'),
-    supabase.from('bar_prodotti').select('*').order('ordine').order('nome'),
-    supabase.from('bar_tavoli').select('*').order('ordine').order('etichetta'),
-    supabase.from('bar_impostazioni').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('categorie').select('*').order('ordine').order('nome'),
+    supabase.from('prodotti').select('*').order('ordine').order('nome'),
+    supabase.from('tavoli').select('*').order('ordine').order('etichetta'),
+    supabase.from('impostazioni').select('*').eq('id', 1).maybeSingle(),
   ])
   const err = c.error || p.error || t.error || i.error
   if (err) return fail(err, 'Caricamento non riuscito')
@@ -104,7 +104,7 @@ $('prod-list').addEventListener('change', async e => {
   const id = e.target.dataset.toggle
   if (!id) return
   const disponibile = e.target.checked
-  const { error } = await supabase.from('bar_prodotti').update({ disponibile }).eq('id', id)
+  const { error } = await supabase.from('prodotti').update({ disponibile }).eq('id', id)
   if (error) { e.target.checked = !disponibile; return fail(error) }
   state.prodotti.find(p => p.id === id).disponibile = disponibile
   e.target.closest('.list-row').classList.toggle('off', !disponibile)
@@ -153,8 +153,8 @@ $('prod-form').addEventListener('submit', async e => {
     disponibile: $('p-disp').checked,
   }
   const { error } = editing
-    ? await supabase.from('bar_prodotti').update(row).eq('id', editing.id)
-    : await supabase.from('bar_prodotti').insert(row)
+    ? await supabase.from('prodotti').update(row).eq('id', editing.id)
+    : await supabase.from('prodotti').insert(row)
   if (error) return fail(error, 'Salvataggio non riuscito')
   $('prod-dialog').close()
   toast('Prodotto salvato')
@@ -163,7 +163,7 @@ $('prod-form').addEventListener('submit', async e => {
 
 $('p-del').addEventListener('click', async () => {
   if (!editing || !confirm(`Eliminare "${editing.nome}${editing.variante ? ' ' + editing.variante : ''}"?`)) return
-  const { error } = await supabase.from('bar_prodotti').delete().eq('id', editing.id)
+  const { error } = await supabase.from('prodotti').delete().eq('id', editing.id)
   if (error) return fail(error)
   $('prod-dialog').close()
   toast('Prodotto eliminato')
@@ -196,13 +196,13 @@ $('cat-list').addEventListener('click', async e => {
       attiva: row.querySelector('.c-attiva').checked,
     }
     if (!upd.nome) return toast('Il nome è obbligatorio')
-    const { error } = await supabase.from('bar_categorie').update(upd).eq('id', id)
+    const { error } = await supabase.from('categorie').update(upd).eq('id', id)
     if (error) return fail(error)
     toast('Categoria salvata')
     loadAll()
   } else if (e.target.hasAttribute('data-del-cat')) {
     if (!confirm('Eliminare questa categoria?')) return
-    const { error } = await supabase.from('bar_categorie').delete().eq('id', id)
+    const { error } = await supabase.from('categorie').delete().eq('id', id)
     if (error) return fail(error)
     toast('Categoria eliminata')
     loadAll()
@@ -214,7 +214,7 @@ $('cat-form').addEventListener('submit', async e => {
   const nome = $('cat-new').value.trim()
   if (!nome) return
   const ordine = Math.max(0, ...state.categorie.map(c => c.ordine)) + 1
-  const { error } = await supabase.from('bar_categorie').insert({ nome, ordine })
+  const { error } = await supabase.from('categorie').insert({ nome, ordine })
   if (error) return fail(error)
   $('cat-new').value = ''
   toast('Categoria aggiunta')
@@ -260,7 +260,7 @@ async function addTavoli(etichette) {
   let ordine = Math.max(0, ...state.tavoli.map(t => t.ordine))
   const rows = etichette.filter(e => e && !esistenti.has(e)).map(etichetta => ({ etichetta, ordine: ++ordine }))
   if (!rows.length) return toast('Tavoli già presenti')
-  const { error } = await supabase.from('bar_tavoli').insert(rows)
+  const { error } = await supabase.from('tavoli').insert(rows)
   if (error) return fail(error)
   toast(rows.length === 1 ? 'Tavolo aggiunto' : `${rows.length} tavoli aggiunti`)
   loadAll()
@@ -284,7 +284,7 @@ $('qr-grid').addEventListener('click', async e => {
   if (!card) return
   if (e.target.hasAttribute('data-del-tav')) {
     if (!confirm('Eliminare questo tavolo? Il QR già stampato continuerà a funzionare.')) return
-    const { error } = await supabase.from('bar_tavoli').delete().eq('id', card.dataset.tav)
+    const { error } = await supabase.from('tavoli').delete().eq('id', card.dataset.tav)
     if (error) return fail(error)
     loadAll()
   } else if (e.target.hasAttribute('data-png')) {
@@ -341,7 +341,7 @@ $('imp-form').addEventListener('submit', async e => {
     sottotitolo: $('imp-sub').value.trim() || null,
     nota_piede: $('imp-nota').value.trim() || null,
   }
-  const { error } = await supabase.from('bar_impostazioni').upsert(row)
+  const { error } = await supabase.from('impostazioni').upsert(row)
   if (error) return fail(error)
   toast('Impostazioni salvate')
   loadAll()

@@ -1,9 +1,9 @@
 -- 02_seed_menu.sql — menu iniziale. Idempotente: salta se esistono già prodotti.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM public.bar_prodotti) THEN RETURN; END IF;
+  IF EXISTS (SELECT 1 FROM drinkin.prodotti) THEN RETURN; END IF;
 
-  INSERT INTO public.bar_categorie (nome, ordine) VALUES
+  INSERT INTO drinkin.categorie (nome, ordine) VALUES
     ('Tavola Calda – Pasta', 1),
     ('Tavola Calda – Insalate e Secondi', 2),
     ('Pizza', 3),
@@ -13,7 +13,7 @@ BEGIN
     ('Caffetteria', 7)
   ON CONFLICT (nome) DO NOTHING;
 
-  INSERT INTO public.bar_prodotti (categoria_id, nome, variante, descrizione, prezzo, surgelato, disponibile, ordine)
+  INSERT INTO drinkin.prodotti (categoria_id, nome, variante, descrizione, prezzo, surgelato, disponibile, ordine)
   SELECT c.id, v.nome, v.variante, v.descrizione, v.prezzo, v.surgelato, v.disponibile, v.ordine
   FROM (VALUES
     ('Tavola Calda – Pasta', 'Bolognese', NULL, NULL, 11.00, false, true, 1),
@@ -71,5 +71,5 @@ BEGIN
     ('Caffetteria', 'Tè e tisane', NULL, NULL, 2.50, false, true, 53),
     ('Caffetteria', 'Cioccolata calda', NULL, NULL, 3.50, false, true, 54)
   ) AS v(categoria, nome, variante, descrizione, prezzo, surgelato, disponibile, ordine)
-  JOIN public.bar_categorie c ON c.nome = v.categoria;
+  JOIN drinkin.categorie c ON c.nome = v.categoria;
 END $$;

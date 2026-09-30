@@ -43,9 +43,9 @@ function renderItem(p) {
 
 async function load() {
   const [imp, cat, prod] = await Promise.all([
-    supabase.from('bar_impostazioni').select('*').eq('id', 1).maybeSingle(),
-    supabase.from('bar_categorie').select('id,nome,ordine').eq('attiva', true).order('ordine').order('nome'),
-    supabase.from('bar_prodotti').select('id,categoria_id,nome,variante,descrizione,prezzo,surgelato,ordine')
+    supabase.from('impostazioni').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('categorie').select('id,nome,ordine').eq('attiva', true).order('ordine').order('nome'),
+    supabase.from('prodotti').select('id,categoria_id,nome,variante,descrizione,prezzo,surgelato,ordine')
       .eq('disponibile', true).order('ordine').order('nome'),
   ])
   const err = imp.error || cat.error || prod.error

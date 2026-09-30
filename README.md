@@ -7,9 +7,10 @@ Menu digitale del bar con QR code per i tavoli. Sito statico (HTML/CSS/JS) + Sup
 
 ## Database (Supabase)
 Eseguire in ordine nell'SQL Editor:
-1. `sql/01_schema.sql` — tabelle `bar_*`, RLS (lettura pubblica, scrittura solo per gli utenti in `bar_admin`).
+1. `sql/01_schema.sql` — schema `drinkin` con tabelle e RLS (lettura pubblica, scrittura solo per gli utenti in `drinkin.admin`).
 2. `sql/02_seed_menu.sql` — menu iniziale; non fa nulla se ci sono già prodotti.
 3. `sql/03_aggiungi_admin.sql` — abilita un utente come amministratore.
+4. *Project Settings → Data API → Exposed schemas*: aggiungere `drinkin`.
 
 Le credenziali (URL e chiave publishable) sono in `js/config.js`.
 
